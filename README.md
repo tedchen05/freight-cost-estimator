@@ -115,7 +115,8 @@ pandas 讀取 `.xlsx` 需要 openpyxl，執行 `pip install -r requirements.txt`
 
 ```
 freight-cost-estimator/
-├── 託運估價系統v3.0.py    # 主程式（執行這個）
+├── 託運估價系統v3.0.py    # 視窗介面（主程式，執行這個）
+├── freight_core.py        # 核心功能：讀取運費表、計算運費
 ├── 操作手冊.txt           # 給使用者的簡易操作說明
 ├── requirements.txt       # 需要安裝的套件
 ├── 運費.xlsx              # 運費表（程式讀取的資料）

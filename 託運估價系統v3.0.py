@@ -1,319 +1,197 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Aug  7 20:40:03 2024
+託運估價系統
+視窗介面：輸入 Excel 名稱後，選擇送貨區域與重量（或板數）估算託運運費。
 
 @author: 陳皓均
 """
 
 import tkinter as tk
-import pandas as pd
 
-def on_submit():
-    try:
-        df = pd.read_excel(entry.get() + ".xlsx")
-    except :
-        label2.config(text="找不到檔案")
-        return
-    df1 = pd.read_excel(entry.get() + ".xlsx", sheet_name="注意事項")
+from freight_core import FreightTable
 
-    root.destroy()
-    
-    car = tk.Tk()
-    car.geometry("850x600")
-    car.resizable(False, False) 
-    car.title("車資估算表")
 
-    car_left = tk.Frame(car, width=100, height=400)
-    car_right = tk.Frame(car, width=100, height=400)
-    car_bottom = tk.Frame(car, width=100, height=400)
-    
-    car_left.grid(row=0, column=0, sticky="NW")
-    car_right.grid(row=0, column=1, sticky="NW")
-    car_bottom.grid(row=0, column=2, sticky="NW")
-    
-    areas = df.columns[1:9]
-    
-    area_title=tk.Label(car_left,text="請選擇區域",font=("TkDefaultFont",16))
-    area_title.grid(sticky="nw")
-    
-    area_var = tk.StringVar()
-    area_var.set("0")
-    
-    for i in range(len(areas)):
-        area= tk.Radiobutton(car_left,text=areas[i],value=i,font=("TkDefaultFont",12),variable=area_var)  
-        area.grid(sticky="W")  
-        
-    blank_title = tk.Label(car_left,text="",font=("TkDefaultFont",16))
-    blank_title.grid(sticky="SW")
-    
-    area_title2 = tk.Label(car_left,text="中南部",font=("TkDefaultFont",16))
-    area_title2.grid(sticky="SW")
-    
-    areas2 = df.columns[10:12]
-    
-    area_var2 = tk.StringVar()
-    area_var2.set("0")
-    
-    for i in range(len(areas2)):
-        area2= tk.Radiobutton(car_left,text=areas2[i],value=i,font=("TkDefaultFont",12),variable=area_var2)  
-        area2.grid(sticky="W")  
-    
-    blank_title1 = tk.Label(car_left,text="",font=("TkDefaultFont",16))
-    blank_title1.grid(sticky="SW")
-    
-    area_title3 = tk.Label(car_left,text="請輸入重量(KG)",font=("TkDefaultFont",16))
-    area_title3.grid(sticky="SW")
-    
-    area_kg=tk.Entry(car_left)
-    area_kg.grid(sticky="W")  
-    
-    muchs = df.iloc[:,0]
-    
-    much_title=tk.Label(car_right,text="請選擇重量或板數",font=("TkDefaultFont",16))
-    much_title.grid(sticky="W")
-    much_var = tk.StringVar()  
-    much_var.set("0")
-    
-    for i in range(len(muchs)):
-        
-        much= tk.Radiobutton(car_right,text=muchs[i],value=i,font=("TkDefaultFont",12),variable=much_var)  
-        much.grid(sticky="w")
-    
-    manual=tk.Label(car_bottom,text="其他說明",font=("TkDefaultFont",16))
-    manual.grid(sticky="W")
-    
-    ps=df1["注意事項"]
-    
-    for i in range(len(ps)):
-        if i == 9 or i == 10:
-            much= tk.Label(car_bottom,text=ps[i],font=("TkDefaultFont",12),fg="#D26900")  
-            much.grid(sticky="w")
-        elif i == 11 or i == 12:
-            much= tk.Label(car_bottom,text=ps[i],font=("TkDefaultFont",12),fg="#AE0000")  
-            much.grid(sticky="w")
+# ===== 設定 =====
+
+DEFAULT_EXCEL = "運費"
+
+TITLE_FONT = ("TkDefaultFont", 16)
+TEXT_FONT = ("TkDefaultFont", 12)
+RESULT_FONT = ("TkDefaultFont", 18)
+
+# 注意事項要上色的列：{列索引: 顏色}
+NOTE_COLORS = {9: "#D26900", 10: "#D26900", 11: "#AE0000", 12: "#AE0000"}
+
+
+# ===== 介面：讀取 Excel =====
+
+def ask_excel():
+    """輸入 Excel 名稱並讀取，成功回傳 FreightTable，關閉視窗則回傳 None"""
+    loaded = {}
+
+    root = tk.Tk()
+    root.title("讀取 Excel 檔案")
+    root.geometry("320x50")
+    root.resizable(False, False)
+
+    tk.Label(root, text="請輸入要讀取的Excel名稱:").grid(row=0, column=0)
+    entry = tk.Entry(root, width=10)
+    entry.insert(0, DEFAULT_EXCEL)
+    entry.grid(row=0, column=1, padx=16)
+    error = tk.Label(root, text="")
+    error.grid(row=1, column=0, sticky="w")
+
+    def on_submit(event=None):
+        try:
+            loaded["table"] = FreightTable(entry.get() + ".xlsx")
+        except FileNotFoundError:
+            error.config(text="找不到檔案")
+            return
+        except (ValueError, KeyError):
+            error.config(text="Excel 格式不符")
+            return
+        root.destroy()
+
+    tk.Button(root, text="確認", command=on_submit).grid(row=0, column=2)
+    root.bind("<Return>", on_submit)
+    entry.focus_set()
+
+    root.mainloop()
+    return loaded.get("table")
+
+
+# ===== 介面：車資估算表 =====
+
+class EstimatorWindow:
+    """車資估算主視窗：左欄選區域與輸入重量、中欄選重量／板數、右欄顯示說明與結果"""
+
+    def __init__(self, table):
+        self.table = table
+
+        self.win = tk.Tk()
+        self.win.title("車資估算表")
+        self.win.geometry("850x600")
+        self.win.resizable(False, False)
+
+        self.north_area = tk.IntVar(value=0)
+        self.south_area = tk.IntVar(value=0)
+        self.size = tk.IntVar(value=0)
+
+        left = tk.Frame(self.win)
+        middle = tk.Frame(self.win)
+        right = tk.Frame(self.win)
+        left.grid(row=0, column=0, sticky="nw")
+        middle.grid(row=0, column=1, sticky="nw")
+        right.grid(row=0, column=2, sticky="nw")
+
+        self._build_left(left)
+        self._build_middle(middle)
+        self._build_right(right)
+
+    def _title(self, parent, text):
+        tk.Label(parent, text=text, font=TITLE_FONT).grid(sticky="w")
+
+    def _radios(self, parent, options, variable):
+        for i, text in enumerate(options):
+            tk.Radiobutton(parent, text=text, value=i, variable=variable,
+                           font=TEXT_FONT).grid(sticky="w")
+
+    def _buttons(self, parent, on_calc, on_clear):
+        """計算／清除按鈕列，回傳計算按鈕"""
+        row = tk.Frame(parent)
+        row.grid(sticky="w")
+        calc = tk.Button(row, text="計算", command=on_calc)
+        calc.pack(side="left")
+        tk.Button(row, text="清除", command=on_clear).pack(side="left", padx=20)
+        return calc
+
+    def _build_left(self, frame):
+        """北部區域、中南部區域與重量輸入"""
+        self._title(frame, "請選擇區域")
+        self._radios(frame, self.table.north_areas, self.north_area)
+
+        self._title(frame, "")
+        self._title(frame, "中南部")
+        self._radios(frame, self.table.south_areas, self.south_area)
+
+        self._title(frame, "")
+        self._title(frame, "請輸入重量(KG)")
+        self.kg_entry = tk.Entry(frame)
+        self.kg_entry.grid(sticky="w")
+        self.south_calc = self._buttons(frame, self.calc_south, self.clear_south)
+
+    def _build_middle(self, frame):
+        """北部用的重量／板數"""
+        self._title(frame, "請選擇重量或板數")
+        self._radios(frame, self.table.sizes, self.size)
+        self.north_calc = self._buttons(frame, self.calc_north, self.clear_north)
+
+    def _build_right(self, frame):
+        """注意事項與估算結果"""
+        self._title(frame, "其他說明")
+        for i, note in enumerate(self.table.notes):
+            tk.Label(frame, text=note, font=TEXT_FONT,
+                     fg=NOTE_COLORS.get(i, "black")).grid(sticky="w")
+
+        self._title(frame, "估算表：")
+        self.result = tk.Label(frame, text="", font=RESULT_FONT)
+        self.result.grid(sticky="w")
+
+    def _show(self, text):
+        """顯示結果，並鎖住計算按鈕直到按下清除"""
+        self.result.config(text=text)
+        self.north_calc.config(state=tk.DISABLED)
+        self.south_calc.config(state=tk.DISABLED)
+
+    def _clear(self):
+        self.result.config(text="")
+        self.north_calc.config(state=tk.NORMAL)
+        self.south_calc.config(state=tk.NORMAL)
+
+    def calc_north(self):
+        area = self.north_area.get()
+        size = self.size.get()
+        price = self.table.north_price(area, size)
+        self._show(f"\n區域：{self.table.north_areas[area]}\n\n"
+                   f"重量/板數：{self.table.sizes[size]}\n\n"
+                   f"預估金額：{price}元")
+
+    def clear_north(self):
+        self._clear()
+
+    def calc_south(self):
+        kg_text = self.kg_entry.get()
+        if not kg_text.isdigit():
+            self._show("請輸入數字")
+            return
+
+        kg = int(kg_text)
+        area_name = self.table.south_areas[self.south_area.get()]
+        price = self.table.south_price(self.south_area.get(), kg)
+
+        if price is None:
+            self._show("重量太大無法計算")
+        elif kg >= self.table.max_kg:
+            self._show(f"\n區域：{area_name}\n重量：{kg} KG\n\n"
+                       f"超過最大{self.table.max_kg}重量\n以兩台車計算價錢\n\n"
+                       f"預估金額：{price}元")
         else:
-            much= tk.Label(car_bottom,text=ps[i],font=("TkDefaultFont",12))  
-            much.grid(sticky="w")
-    
-    maneys=tk.Label(car_bottom,text="估算表：",font=("TkDefaultFont",16))
-    maneys.grid(sticky="W")
-    
-    maneys1=[]
-    
-    for j in range(1,9):
-        maneys1.append(df.columns[j])
-        
-    # maneys1 = df.columns[1]
-    
-    # maneys2 = df.columns[2]
-        
-    # maneys3 = df.columns[3]
-        
-    # maneys4 = df.columns[4]
-        
-    # maneys5 = df.columns[5]
-    
-    # maneys6 = df.columns[6]
-    
-    # maneys7 = df.columns[7]
-    
-    # maneys8 = df.columns[8]
+            self._show(f"\n區域：{area_name}\n\n重量：{kg} KG\n\n"
+                       f"預估金額：{price}元")
 
-    def submitOpen():
-        submit.config(state=tk.DISABLED)
-        submit3.config(state=tk.DISABLED)
-        submit4.config(state=tk.DISABLED)
-        
-        much = much_var.get()
-        area = area_var.get()
-        global money
+    def clear_south(self):
+        self._clear()
+        self.kg_entry.delete(0, tk.END)
 
-        for i in range(8):
-            if area == str(i):
-                area1=areas[int(area)]
-                much1=muchs[int(much)]
-                maney1=df[maneys1[i]][int(much)]
-        
-        # if area == "0" :
-        #     area1=areas[int(area)]
-        #     much1=muchs[int(much)]
-        #     maney1=df[maneys1][int(much)]
-        # elif area == "1" :
-        #     area1=areas[int(area)]
-        #     much1=muchs[int(much)]
-        #     maney1=df[maneys2][int(much)]
-        # elif area == "2" :
-        #     area1=areas[int(area)]
-        #     much1=muchs[int(much)]
-        #     maney1=df[maneys3][int(much)]
-        # elif area == "3"  :
-        #     area1=areas[int(area)]
-        #     much1=muchs[int(much)]
-        #     maney1=df[maneys4][int(much)]
-        # elif area == "4"  :
-        #     area1=areas[int(area)]
-        #     much1=muchs[int(much)]
-        #     maney1=df[maneys5][int(much)]
-        # elif area == "5"  :
-        #     area1=areas[int(area)]
-        #     much1=muchs[int(much)]
-        #     maney1=df[maneys6][int(much)]
-        # elif area == "6"  :
-        #     area1=areas[int(area)]
-        #     much1=muchs[int(much)]
-        #     maney1=df[maneys7][int(much)]
-        # elif area == "7"  :
-        #     area1=areas[int(area)]
-        #     much1=muchs[int(much)]
-        #     maney1=df[maneys8][int(much)]
-        # else:
-        #     money = tk.Label(car_bottom, text="輸入錯誤")
-        #     money.grid(row=2, column=0, sticky="SNWE")
-    
-        money = tk.Label(car_bottom,text=f"\n區域：{area1}\n\n重量/板數：{much1}\n\n預估金額：{maney1}元",font=("TkDefaultFont",18))
-        money.grid(row=16, column=0, sticky="W")
+    def run(self):
+        self.win.mainloop()
 
-        
-    def submitOpen2():
-        global money
-        money.destroy()
-        submit.config(state=tk.NORMAL)
-        submit3.config(state=tk.NORMAL)
-        submit4.config(state=tk.NORMAL)
-    
-    def submitOpen3():
-        global area4,area3
 
-        if area_kg.get().isdigit() == False:
-            submit3.config(state=tk.DISABLED)
-            submit.config(state=tk.DISABLED)
-            submit2.config(state=tk.DISABLED)
-            text="請輸入數字"
-        else:
-            submit3.config(state=tk.DISABLED)
-            submit.config(state=tk.DISABLED)
-            submit2.config(state=tk.DISABLED)
-            
-            area_kg_g=int(area_kg.get())
-            area4=area_var2.get()
-            
-            if area4 == "0" :
-                if area_kg_g >= (df[df.columns[9]][6]-1)*2:
-                    price = "重量太大無法計算"
-                else:
-                    if area_kg_g >= df[df.columns[9]][6]:
-                        area_kg_g2 = area_kg_g - df[df.columns[9]][6]+1
-                        if area_kg_g2 >= df[df.columns[9]][5]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[10]][5])+int(area_kg_g2*df[df.columns[10]][5])
-                        elif area_kg_g2 >= df[df.columns[9]][4]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[10]][5])+int(area_kg_g2*df[df.columns[10]][4])
-                        elif area_kg_g2 >= df[df.columns[9]][3]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[10]][5])+int(area_kg_g2*df[df.columns[10]][3])        
-                        elif area_kg_g2 >= df[df.columns[9]][2]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[10]][5])+int(area_kg_g2*df[df.columns[10]][2])
-                        elif area_kg_g2 >= df[df.columns[9]][1]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[10]][5])+1200
-                        else:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[10]][5])+1100
-                    elif area_kg_g >= df[df.columns[9]][5]:
-                        price=int(area_kg_g*df[df.columns[10]][5])
-                    elif area_kg_g >= df[df.columns[9]][4]:
-                        price=int(area_kg_g*df[df.columns[10]][4])
-                    elif area_kg_g >= df[df.columns[9]][3]:
-                        price=int(area_kg_g*df[df.columns[10]][3])        
-                    elif area_kg_g >= df[df.columns[9]][2]:
-                        price=int(area_kg_g*df[df.columns[10]][2])
-                    elif area_kg_g >= df[df.columns[9]][1]:
-                        price=1200 
-                    else:
-                        price=1100
-            else:
-                if area_kg_g >= (df[df.columns[9]][6]-1)*2:
-                    price = "重量太大無法計算"
-                else:
-                    if area_kg_g >= df[df.columns[9]][6]:
-                        area_kg_g2 = area_kg_g - df[df.columns[9]][6]+1
-                        if area_kg_g2 >= df[df.columns[9]][5]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[11]][5])+int(area_kg_g2*df[df.columns[11]][5])
-                        elif area_kg_g2 >= df[df.columns[9]][4]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[11]][5])+int(area_kg_g2*df[df.columns[11]][4])
-                        elif area_kg_g2 >= df[df.columns[9]][3]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[11]][5])+int(area_kg_g2*df[df.columns[11]][3])        
-                        elif area_kg_g2 >= df[df.columns[9]][2]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[11]][5])+int(area_kg_g2*df[df.columns[11]][2])
-                        elif area_kg_g2 >= df[df.columns[9]][1]:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[11]][5])+1600
-                        else:
-                            price=int((df[df.columns[9]][6]-1)*df[df.columns[11]][5])+1400
-                    elif area_kg_g >= df[df.columns[9]][5]:
-                        price=int(area_kg_g*df[df.columns[11]][5])
-                    elif area_kg_g >= df[df.columns[9]][4]:
-                        price=int(area_kg_g*df[df.columns[11]][4])
-                    elif area_kg_g >= df[df.columns[9]][3]:
-                        price=int(area_kg_g*df[df.columns[11]][3])        
-                    elif area_kg_g >= df[df.columns[9]][2]:
-                        price=int(area_kg_g*df[df.columns[11]][2])
-                    elif area_kg_g >= df[df.columns[9]][1]:
-                        price=1600
-                    else:
-                        price=1400
-                        
-            if area_kg_g >= (df[df.columns[9]][6]-1)*2:
-                text= price
-            elif area_kg_g >= df[df.columns[9]][6]:
-                text=f"\n區域：{areas2[int(area4)]}\n重量：{area_kg_g} KG\n\n超過最大{df[df.columns[9]][6]}重量\n已兩台車計算價錢\n\n預估金額：{price}元"
-            else:
-                text=f"\n區域：{areas2[int(area4)]}\n\n重量：{area_kg_g} KG\n\n預估金額：{price}元"
-        area3= tk.Label(car_bottom,text=text,font=("TkDefaultFont",18))
-        area3.grid(row=15, column=0, sticky="W")  
-        
-        
-    def submitOpen4():
-        global area3
-        area3.destroy()
-        area_kg.delete(0, tk.END)
-        submit3.config(state=tk.NORMAL)
-        submit.config(state=tk.NORMAL)
-        submit2.config(state=tk.NORMAL)
-    
-    submit3 = tk.Button(car_left,text="計算",command=submitOpen3)
-    submit3.grid(sticky="SW")
-    
-    submit4 = tk.Button(car_left,text="清除",command=submitOpen4)
-    submit4.grid(row=16, column=0)    
-        
-    submit = tk.Button(car_right,text="計算",command=submitOpen)
-    submit.grid(sticky="SW")
-    
-    submit2 = tk.Button(car_right,text="清除",command=submitOpen2)
-    submit2.grid(row=8,column=0)
-    
-    car.mainloop()
-    
-root = tk.Tk()
-root.title("讀取 Excel 檔案")
+def main():
+    table = ask_excel()
+    if table is not None:
+        EstimatorWindow(table).run()
 
-root.geometry("320x50")
-root.resizable(False, False)
 
-label = tk.Label(root, text="請輸入要讀取的Excel名稱:")
-label.grid(row=0, column=0)
-
-labelblank = tk.Label(root, text="    ")
-labelblank.grid(row=0, column=1)
-
-entry = tk.Entry(root,width=10)
-entry.grid(row=0, column=2)
-
-labelblank2 = tk.Label(root, text="        ")
-labelblank2.grid(row=0, column=3)
-
-submit_button = tk.Button(root, text="確認", command=on_submit)
-submit_button.grid(row=0, column=4)
-
-root.bind('<Return>', lambda event: on_submit())
-
-label2 = tk.Label(root, text="")
-label2.grid(sticky='w')
-
-root.mainloop()
+if __name__ == "__main__":
+    main()
