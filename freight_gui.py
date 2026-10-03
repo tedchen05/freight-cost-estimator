@@ -6,6 +6,8 @@ Created on Wed Aug  7 20:40:03 2024
 
 託運估價系統視窗介面
 """
+import os
+import sys
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -13,6 +15,7 @@ from freight_core import (ExcelFormatError, FreightTable, app_dir,
                           default_excel_path)
 
 APP_TITLE = "託運估價系統 v4.0"
+ICON = os.path.join("images", "icon.ico")
 FONT = "微軟正黑體"
 
 PRIMARY = "#1F5FAD"
@@ -30,6 +33,12 @@ NORTH_TAB, SOUTH_TAB = 0, 1  # 分頁順序
 MAX_KG_DIGITS = 6  # 重量最多輸入幾位數
 
 
+# 打包進exe的檔案路徑(exe執行時解壓到暫存資料夾)
+def resource_path(name):
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, name)
+
+
 # 介面
 
 # 主視窗
@@ -41,6 +50,10 @@ class App:
         self.quote = None
 
         root.title(APP_TITLE)
+        try:
+            root.iconbitmap(resource_path(ICON))
+        except tk.TclError:
+            pass  # 找不到圖示時用預設圖示
         root.resizable(False, False)
         self._setup_style()
 
