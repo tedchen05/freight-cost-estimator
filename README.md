@@ -130,6 +130,7 @@ freight-cost-estimator/
 ├── requirements.txt       # 需要安裝的套件
 ├── 運費.xlsx              # 運費表（程式讀取的資料）
 ├── images/
+│   ├── icon.ico           # 程式圖示（exe 與視窗標題列）
 │   └── screenshot.png     # 介面截圖
 └── .vscode/
     ├── launch.json        # VS Code 按 F5 的執行設定
