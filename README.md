@@ -2,6 +2,10 @@
 
 讀取運費 Excel 表，選擇送貨區域和重量（或板數）後，馬上算出預估運費，協助公司核對託運廠商的請款金額。
 
+> 為了公司對帳寫的小工具，重新優化的版本。
+
+![介面截圖](images/screenshot.png)
+
 ## 功能
 
 - 開啟就自動讀取運費表，點選條件後**立即顯示運費**，不用按計算
@@ -123,9 +127,10 @@ pandas 讀取 `.xlsx` 需要 openpyxl，執行 `pip install -r requirements.txt`
 freight-cost-estimator/
 ├── freight_gui.py         # 視窗介面（主程式，執行這個）
 ├── freight_core.py        # 核心功能：讀取運費表、計算運費
-├── 操作手冊.txt           # 給使用者的簡易操作說明
 ├── requirements.txt       # 需要安裝的套件
 ├── 運費.xlsx              # 運費表（程式讀取的資料）
+├── images/
+│   └── screenshot.png     # 介面截圖
 └── .vscode/
     ├── launch.json        # VS Code 按 F5 的執行設定
     └── extensions.json    # 建議安裝的 VS Code 擴充功能
