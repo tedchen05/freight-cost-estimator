@@ -5,7 +5,7 @@
             "name": "執行託運估價系統",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/託運估價系統v3.0.py",
+            "program": "${workspaceFolder}/freight_gui.py",
             "cwd": "${workspaceFolder}",
             "console": "integratedTerminal"
         },

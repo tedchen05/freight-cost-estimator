@@ -1,29 +1,49 @@
 # -*- coding: utf-8 -*-
 """
-託運估價系統核心功能
-讀取運費 Excel 表，並依送貨區域與重量（或板數）計算運費。
+Created on Wed Aug  7 20:40:03 2024
 
 @author: 陳皓均
+
+託運估價系統核心功能
 """
+import os
+import re
+import sys
+from dataclasses import dataclass
 
 import pandas as pd
 
-
-# ===== 設定 =====
-
+DEFAULT_EXCEL = "運費.xlsx"
 NOTES_SHEET = "注意事項"
 
-# 運費表（第一個工作表）的欄位位置
-SIZE_COL = 0                      # 重量／板數
-NORTH_AREA_COLS = slice(1, 9)     # 北部各送貨區域
-SOUTH_WEIGHT_COL = 9              # 中南區載運量（重量級距）
-SOUTH_AREA_COLS = slice(10, 12)   # 彰化(含)以北、雲林(含)以南
+# 運費表欄位位置
+SIZE_COL = 0                      # 重量/板數
+NORTH_AREA_COLS = slice(1, 9)     # 北部區域
+SOUTH_WEIGHT_COL = 9              # 中南部重量級距
+SOUTH_AREA_COLS = slice(10, 12)   # 中南部區域
+
+# 注意事項編號，例如3.
+NOTE_START = re.compile(r"^\d+\.")
 
 
-# ===== 運費計算 =====
+# 檔案位置
 
+# 程式所在資料夾(exe也適用)
+def app_dir():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+# 預設運費表路徑
+def default_excel_path():
+    return os.path.join(app_dir(), DEFAULT_EXCEL)
+
+
+# 運費計算
+
+# 一台車的運費
 def single_truck_price(kg, weights, rates):
-    """一台車的運費：前兩級是固定金額，之後依重量級距乘上每公斤費率"""
     for i in range(5, 1, -1):
         if kg >= weights[i]:
             return int(kg * rates[i])
@@ -32,8 +52,8 @@ def single_truck_price(kg, weights, rates):
     return int(rates[0])
 
 
+# 中南部運費，超過載重回傳None
 def south_price(kg, weights, rates):
-    """中南部運費：超過一台車載重以兩台車計算，超過兩台車載重回傳 None"""
     max_kg = weights[6]
     if kg >= (max_kg - 1) * 2:
         return None
@@ -43,33 +63,104 @@ def south_price(kg, weights, rates):
     return single_truck_price(kg, weights, rates)
 
 
-# ===== 運費表 =====
+# 合併被換行拆開的注意事項
+def merge_notes(lines):
+    notes = []
+    for line in lines:
+        line = str(line).strip()
+        if notes and not NOTE_START.match(line):
+            notes[-1] += line
+        else:
+            notes.append(line)
+    return notes
 
+
+# 估價結果
+
+# 無法計算時price為None
+@dataclass
+class Quote:
+    area: str
+    load_label: str     # 「重量/板數」或「重量」
+    load: str
+    price: int | None
+    trucks: int = 1
+    message: str = ""
+
+    @property
+    def ok(self):
+        return self.price is not None
+
+    # 複製用的一行文字
+    def summary(self):
+        if not self.ok:
+            return f"{self.area}／{self.load}：{self.message}"
+        trucks = "（兩台車）" if self.trucks == 2 else ""
+        return f"{self.area}／{self.load}{trucks}：{self.price:,} 元"
+
+
+# Excel格式不符
+class ExcelFormatError(Exception):
+    pass
+
+
+# 運費表
+
+# 讀取運費表並查詢運費
 class FreightTable:
-    """運費 Excel 的內容與查詢"""
 
     def __init__(self, path):
-        df = pd.read_excel(path)
-        notes = pd.read_excel(path, sheet_name=NOTES_SHEET)
+        self.path = path
+        try:
+            df = pd.read_excel(path)
+            notes = pd.read_excel(path, sheet_name=NOTES_SHEET)
 
-        self.sizes = list(df.iloc[:, SIZE_COL])
+            self.sizes = [str(s) for s in df.iloc[:, SIZE_COL]]
 
-        north = df.iloc[:, NORTH_AREA_COLS]
-        self.north_areas = list(north.columns)
-        self._north_prices = north
+            north = df.iloc[:, NORTH_AREA_COLS]
+            self.north_areas = [str(c) for c in north.columns]
+            self._north_prices = north
 
-        south = df.iloc[:, SOUTH_AREA_COLS]
-        self.south_areas = list(south.columns)
-        self._south_rates = [list(south[col]) for col in south.columns]
-        self.south_weights = list(df.iloc[:, SOUTH_WEIGHT_COL])
-        self.max_kg = self.south_weights[6]
+            south = df.iloc[:, SOUTH_AREA_COLS]
+            self.south_areas = [str(c) for c in south.columns]
+            self._south_rates = [list(south[col]) for col in south.columns]
+            self.south_weights = list(df.iloc[:, SOUTH_WEIGHT_COL])
+            self.max_kg = int(self.south_weights[6])
 
-        self.notes = list(notes[NOTES_SHEET])
+            self.notes = merge_notes(notes[NOTES_SHEET].dropna())
+        except (ValueError, KeyError, IndexError) as e:
+            raise ExcelFormatError(str(e)) from e
 
-    def north_price(self, area, size):
-        """北部：依區域與重量／板數查表"""
-        return self._north_prices.iloc[size, area]
+    @property
+    def name(self):
+        return os.path.basename(self.path)
 
-    def south_price(self, area, kg):
-        """中南部：依區域與公斤數計算"""
-        return south_price(kg, self.south_weights, self._south_rates[area])
+    # 單車載重上限
+    @property
+    def single_truck_limit(self):
+        return self.max_kg - 1
+
+    # 兩台車載重上限
+    @property
+    def total_limit(self):
+        return (self.max_kg - 1) * 2 - 1
+
+    # 北部：查表
+    def north_quote(self, area, size):
+        price = self._north_prices.iloc[size, area]
+        quote = Quote(self.north_areas[area], "重量/板數", self.sizes[size], None)
+        if pd.isna(price):
+            quote.message = "運費表沒有這個組合的報價"
+        else:
+            quote.price = int(price)
+        return quote
+
+    # 中南部：依公斤數計算
+    def south_quote(self, area, kg):
+        price = south_price(kg, self.south_weights, self._south_rates[area])
+        quote = Quote(self.south_areas[area], "重量", f"{kg:,} KG", price)
+        if price is None:
+            quote.message = f"超過兩台車上限 {self.total_limit:,} KG，請拆單或議價"
+        elif kg > self.single_truck_limit:
+            quote.trucks = 2
+        return quote
