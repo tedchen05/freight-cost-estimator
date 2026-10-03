@@ -9,7 +9,9 @@ Created on Wed Aug  7 20:40:03 2024
 import os
 import re
 import sys
+import zipfile
 from dataclasses import dataclass
+from typing import Optional
 
 import pandas as pd
 
@@ -59,7 +61,8 @@ def south_price(kg, weights, rates):
         return None
     if kg >= max_kg:
         first_truck = int((max_kg - 1) * rates[5])
-        return first_truck + single_truck_price(kg - max_kg + 1, weights, rates)
+        second_kg = kg - max_kg + 1
+        return first_truck + single_truck_price(second_kg, weights, rates)
     return single_truck_price(kg, weights, rates)
 
 
@@ -83,7 +86,7 @@ class Quote:
     area: str
     load_label: str     # 「重量/板數」或「重量」
     load: str
-    price: int | None
+    price: Optional[int]
     trucks: int = 1
     message: str = ""
 
@@ -128,7 +131,7 @@ class FreightTable:
             self.max_kg = int(self.south_weights[6])
 
             self.notes = merge_notes(notes[NOTES_SHEET].dropna())
-        except (ValueError, KeyError, IndexError) as e:
+        except (ValueError, KeyError, IndexError, zipfile.BadZipFile) as e:
             raise ExcelFormatError(str(e)) from e
 
     @property

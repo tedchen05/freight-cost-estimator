@@ -141,7 +141,8 @@ class App:
                                    font=(FONT, 10, "bold"))
         self.hint_label.pack(anchor="w", pady=(4, 0))
         self.copy_button = ttk.Button(card, text="複製結果",
-                                      command=self.copy_result, state=tk.DISABLED)
+                                      command=self.copy_result,
+                                      state=tk.DISABLED)
         self.copy_button.pack(anchor="e")
 
         self.notes_box = ttk.LabelFrame(side, text=" 注意事項 ", padding=(10, 6))
@@ -177,7 +178,8 @@ class App:
                                   validate="key", validatecommand=only_digits)
         self.kg_entry.pack(side="left")
         ttk.Label(row, text="KG").pack(side="left", padx=(6, 12))
-        ttk.Button(row, text="清除", command=lambda: self.kg.set("")).pack(side="left")
+        ttk.Button(row, text="清除",
+                   command=lambda: self.kg.set("")).pack(side="left")
         ttk.Label(box, style="Muted.TLabel", justify="left", text=(
             f"只能輸入整數公斤數\n"
             f"超過 {self.table.single_truck_limit:,} KG 自動以兩台車計算，"
@@ -205,17 +207,19 @@ class App:
         try:
             table = FreightTable(path)
         except FileNotFoundError:
-            if show_error:
-                messagebox.showerror("找不到檔案", f"找不到運費表：\n{path}")
-            if self.table is None:
-                self.file_label.config(text="找不到 運費.xlsx", foreground=ERROR)
-                self._show_message("請按右上角「更換運費表…」選擇 Excel")
+            self._load_failed("找不到檔案", f"找不到運費表：\n{path}",
+                              "找不到 運費.xlsx", show_error)
+            return
+        except PermissionError:
+            self._load_failed("無法讀取",
+                              "運費表正被其他程式使用，請關閉後再試一次。",
+                              "運費表無法讀取")
             return
         except ExcelFormatError:
-            messagebox.showerror(
-                "Excel 格式不符",
-                "請確認 Excel 有「運費」與「注意事項」兩個工作表，"
-                "且欄位位置沒有被搬動。")
+            self._load_failed("Excel 格式不符",
+                              "請確認 Excel 有「運費」與「注意事項」兩個工作表，"
+                              "且欄位位置沒有被搬動。",
+                              "運費表格式不符")
             return
 
         self.table = table
@@ -230,12 +234,20 @@ class App:
             var.set(0)
         self.refresh()
 
+    # 讀取失敗的提示，還沒有運費表時在右上角顯示原因
+    def _load_failed(self, title, message, label, show_error=True):
+        if show_error:
+            messagebox.showerror(title, message)
+        if self.table is None:
+            self.file_label.config(text=label, foreground=ERROR)
+            self._show_message("請按右上角「更換運費表…」選擇 Excel")
+
     # 計算與顯示
 
     # 重量只能輸入整數
     @staticmethod
     def _valid_kg(text):
-        return text == "" or (text.isdigit() and len(text) <= MAX_KG_DIGITS)
+        return text == "" or (text.isdecimal() and len(text) <= MAX_KG_DIGITS)
 
     # 切換分頁
     def _on_tab_changed(self, event=None):
